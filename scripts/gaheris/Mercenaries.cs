@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using DOL.AI.Brain;
 using DOL.Database;
 using DOL.Events;
@@ -8,6 +5,10 @@ using DOL.GS.PacketHandler;
 using DOL.GS.PropertyCalc;
 using DOL.GS.RealmAbilities;
 using DOL.GS.SkillHandler;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace DOL.GS.Scripts
 {
@@ -1386,6 +1387,11 @@ namespace DOL.GS.Scripts
                 if (oldPercent != HealthPercent)
                     Group?.UpdateMember(this, false);
             }
+        }
+
+        public GameMercenary() : base()
+        {
+            effectListComponent = MercenaryEffectListComponent.Create(this);
         }
 
         /// <summary>
@@ -4810,6 +4816,67 @@ namespace DOL.GS.Scripts
     public class MercenaryInventory : GameNPCInventory
     {
         public MercenaryInventory() : base(new GameNpcInventoryTemplate()) { }
+    }
+
+    /// <summary>
+    /// Effect list which updates the group window as effects are added or removed
+    /// </summary>
+    public class MercenaryEffectListComponent : EffectListComponent
+    {
+        private EffectHelper.PlayerUpdate _requestedMercenaryUpdates;                   // Player updates requested by the effects, to be sent in the next tick.
+        private readonly Lock _mercenaryUpdatesLock = new();
+
+        public MercenaryEffectListComponent(GameLiving owner) : base(owner)
+        {
+        }
+
+        new public static EffectListComponent Create(GameLiving living)
+        {
+            return new MercenaryEffectListComponent(living);
+        }
+
+        public override void BeginTick()
+        {
+            base.BeginTick();
+            SendGroupUpdates();
+        }
+
+        public override void RequestPlayerUpdate(EffectHelper.PlayerUpdate playerUpdate)
+        {
+            lock (_mercenaryUpdatesLock)
+            {
+                _requestedMercenaryUpdates |= playerUpdate;
+                ServiceObjectStore.Add(this as EffectListComponent);
+            }
+        }
+
+        private void SendGroupUpdates()
+        {
+            if (_requestedMercenaryUpdates is EffectHelper.PlayerUpdate.None)
+                return;
+
+
+
+            EffectHelper.PlayerUpdate requestedUpdates;
+
+            lock (_mercenaryUpdatesLock)
+            {
+                if (_requestedMercenaryUpdates is EffectHelper.PlayerUpdate.None)
+                    return;
+
+                requestedUpdates = _requestedMercenaryUpdates;
+                _requestedMercenaryUpdates = EffectHelper.PlayerUpdate.None;
+            }
+
+            if (Owner.ObjectState is GameObject.eObjectState.Deleted)
+                return;
+
+            if ((requestedUpdates & EffectHelper.PlayerUpdate.Icons) != 0)
+                Owner.Group?.UpdateMemberIcons(Owner, false);
+
+            if ((requestedUpdates & EffectHelper.PlayerUpdate.GroupWindow) != 0)
+                Owner.Group?.UpdateMember(Owner, false);
+        }
     }
 
     /// <summary>
