@@ -1374,6 +1374,20 @@ namespace DOL.GS.Scripts
         /// <summary>Summoned servants belong to a hire, not to you, so they get nothing.</summary>
         public virtual bool CanWearGear => true;
 
+        /// <summary>Update health and group window.</summary>
+        public override int Health
+        {
+            get => base.Health;
+            set
+            {
+                int oldPercent = HealthPercent;
+                base.Health = value;
+
+                if (oldPercent != HealthPercent)
+                    Group?.UpdateMember(this, false);
+            }
+        }
+
         /// <summary>
         /// Picks up everything the class knows at this level -- the real spell
         /// lines and the real styles, straight from the game's own data.
